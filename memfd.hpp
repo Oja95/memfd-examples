@@ -1,6 +1,8 @@
 #ifndef _MEMFD_H
 #define _MEMFD_H
 
+#include <syscall.h>
+
 /*
  * SPDX-License-Identifier: Unlicense
  *
@@ -12,7 +14,7 @@
  */
 
 static inline int memfd_create(const char *name, unsigned int flags) {
-    return syscall(__NR_memfd_create, name, flags);
+    return static_cast<int>(syscall(__NR_memfd_create, name, flags));
 }
 
 #ifndef F_LINUX_SPECIFIC_BASE
