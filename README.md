@@ -37,6 +37,11 @@ IPC applications.
   - Redhat/Fedora: `sudo yum -y kernel-headers-$(uname -r)`
   - Arch Linux: `sudo pacman -S linux-headers`
 
+### Building
+Run the following to build two executables: `client` and `server`:
+
+`cmake . && make`
+
 ### References:
 -  [On memfd_create(2)](https://dvdhrm.wordpress.com/2014/06/10/memfd_create2/), David Herrman (*memfd author*)
 - [memfd_create(2) manpage](http://man7.org/linux/man-pages/man2/memfd_create.2.html)
