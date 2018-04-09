@@ -17,6 +17,28 @@ static inline int memfd_create(const char *name, unsigned int flags) {
     return static_cast<int>(syscall(__NR_memfd_create, name, flags));
 }
 
+#define errorp(msg) {        \
+    perror("[Error] " msg);      \
+    exit(EXIT_FAILURE);        \
+}
+
+#define error(...) {        \
+    fprintf(stderr, "[Error] ");    \
+    fprintf(stderr, __VA_ARGS__);    \
+    fprintf(stderr, "\n");      \
+}
+
+#define info(...) {        \
+    fprintf(stdout, "[Info ] ");    \
+    fprintf(stdout, __VA_ARGS__);    \
+    fprintf(stdout, "\n");      \
+}
+
+#define quit(...) {        \
+    error(__VA_ARGS__);        \
+    exit(EXIT_FAILURE);        \
+}
+
 #ifndef F_LINUX_SPECIFIC_BASE
 #define F_LINUX_SPECIFIC_BASE 1024
 #endif

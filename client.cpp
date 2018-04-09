@@ -19,30 +19,12 @@
 #include <unistd.h>
 #include <cstring>
 #include <cerrno>
+#include <ctime>
+#include <string>
 
 #include "memfd.hpp"
 
-#define errorp(msg) {        \
-    perror("[Error] " msg);      \
-    exit(EXIT_FAILURE);        \
-}
 
-#define error(...) {        \
-    fprintf(stderr, "[Error] ");    \
-    fprintf(stderr, __VA_ARGS__);    \
-    fprintf(stderr, "\n");      \
-}
-
-#define info(...) {        \
-    fprintf(stdout, "[Info ] ");    \
-    fprintf(stdout, __VA_ARGS__);    \
-    fprintf(stdout, "\n");      \
-}
-
-#define quit(...) {        \
-    error(__VA_ARGS__);        \
-    exit(EXIT_FAILURE);        \
-}
 
 /* Receive file descriptor passed from the server over
  * the already-connected unix domain socket @conn. */
@@ -117,7 +99,7 @@ int main(int argc, char **argv) {
 
   seals = fcntl(fd, F_GET_SEALS);
   if (!(seals & F_SEAL_SHRINK)) quit("Got non-sealed memfd. Expected an F_SEAL_SHRINK one");
-  if (!(seals & F_SEAL_WRITE)) quit("Got non-sealed memfd. Expected an F_SEAL_WRITE one");
+//  if (!(seals & F_SEAL_WRITE)) quit("Got non-sealed memfd. Expected an F_SEAL_WRITE one");
   if (!(seals & F_SEAL_SEAL)) quit("Got non-sealed memfd. Expected an F_SEAL_SEAL one");
 
   ret = ftruncate(fd, 0);
@@ -136,18 +118,26 @@ int main(int argc, char **argv) {
   }
 
   /* MAP_SHARED should fail on write-sealed memfds */
-  shm1 = static_cast<char *>(mmap(nullptr, shm_size, PROT_READ, MAP_SHARED, fd, 0));
-  shm2 = static_cast<char *>(mmap(nullptr, shm_size, PROT_WRITE, MAP_SHARED, fd, 0));
-  if (shm1 != MAP_FAILED || shm2 != MAP_FAILED) {
-    error("Server memfd F_SEAL_WRITE protection is not working");
-    error("We were able to succesfully map SHM area as writeable!");
-    quit("Exiting!");
-  }
+//  shm1 = static_cast<char *>(mmap(nullptr, shm_size, PROT_READ, MAP_SHARED, fd, 0));
+//  shm2 = static_cast<char *>(mmap(nullptr, shm_size, PROT_WRITE, MAP_SHARED, fd, 0));
+//  if (shm1 != MAP_FAILED/* || shm2 != MAP_FAILED*/) {
+//    error("Server memfd F_SEAL_WRITE protection is not working");
+//    error("We were able to succesfully map SHM area as writeable!");
+//    quit("Exiting!");
+//  }
 
-  shm = static_cast<char *>(mmap(nullptr, shm_size, PROT_READ, MAP_PRIVATE, fd, 0));
+  shm = static_cast<char *>(mmap(nullptr, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
   if (shm == MAP_FAILED) errorp("mmap");
 
-  printf("Message: %s\n", shm);
+  printf("Received from server: %s\n", shm);
+
+
+  struct timespec spec{};
+  while (1) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &spec);
+    sprintf(shm, "Client clock_gettime:  %li", spec.tv_nsec);
+    sleep(3);
+  }
 
   return 0;
 }
