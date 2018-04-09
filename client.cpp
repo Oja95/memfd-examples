@@ -23,7 +23,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "memfd.h"
+#include "memfd.hpp"
 
 #define errorp(msg) {				\
     perror("[Error] " msg);			\
@@ -149,15 +149,15 @@ int main(int argc, char **argv) {
     }
 
     /* MAP_SHARED should fail on write-sealed memfds */
-    shm1 = mmap(NULL, shm_size, PROT_READ, MAP_SHARED, fd, 0);
-    shm2 = mmap(NULL, shm_size, PROT_WRITE, MAP_SHARED, fd, 0);
+    shm1 = static_cast<char *>(mmap(NULL, shm_size, PROT_READ, MAP_SHARED, fd, 0));
+    shm2 = static_cast<char *>(mmap(NULL, shm_size, PROT_WRITE, MAP_SHARED, fd, 0));
     if (shm1 != MAP_FAILED || shm2 != MAP_FAILED) {
         error("Server memfd F_SEAL_WRITE protection is not working");
         error("We were able to succesfully map SHM area as writeable!");
         quit("Exiting!");
     }
 
-    shm = mmap(NULL, shm_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    shm = static_cast<char *>(mmap(NULL, shm_size, PROT_READ, MAP_PRIVATE, fd, 0));
     if (shm == MAP_FAILED)
         errorp("mmap");
 

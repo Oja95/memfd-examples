@@ -24,7 +24,7 @@
 #include <time.h>
 #include <errno.h>
 
-#include "memfd.h"
+#include "memfd.hpp"
 
 static void error(char *msg) {
     perror(msg);
@@ -48,7 +48,7 @@ static int new_memfd_region(char *unique_str) {
     if (ret == -1)
         error("fcntl(F_SEAL_SHRINK)");
 
-    shm = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    shm = static_cast<char *>(mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
     if (shm == MAP_FAILED)
         error("mmap()");
 
