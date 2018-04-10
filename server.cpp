@@ -21,6 +21,9 @@
 #include <cstdio>
 #include <cerrno>
 #include <ctime>
+#include <vector>
+#include <set>
+#include <fstream>
 
 #include "memfd.hpp"
 
@@ -96,9 +99,26 @@ static void send_fd(int conn, int fd) {
   if (size < 0) error("sendmsg()");
 }
 
-#define LOCAL_SOCKET_NAME    "./unix_socket"
+#define LOCAL_SOCKET_NAME    "/tmp/unix_socket"
 #define MAX_CONNECT_BACKLOG  128
+#define SIG_INTERVAL_NS 1000
 
+void timespec_diff(const struct timespec *start, const struct timespec *stop,
+                   struct timespec *result) {
+  if ((stop->tv_nsec - start->tv_nsec) < 0) {
+    result->tv_sec = stop->tv_sec - start->tv_sec - 1;
+    result->tv_nsec = stop->tv_nsec - start->tv_nsec + 1000000000;
+  } else {
+    result->tv_sec = stop->tv_sec - start->tv_sec;
+    result->tv_nsec = stop->tv_nsec - start->tv_nsec;
+  }
+}
+
+
+static const char *const delim = " ";
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
 static void start_server_and_send_memfd_to_clients() {
   int sock, conn, fd, ret;
   struct sockaddr_un address;
@@ -142,14 +162,42 @@ static void start_server_and_send_memfd_to_clients() {
   shm = static_cast<char *>(mmap(nullptr, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
   if (shm == MAP_FAILED) errorp("mmap");
 
-  while (1) {
-    sleep(5);
-    printf("Received from client: %s\n", shm);
+
+  // Wait until the client has memory mapped the shared memory and is writing to the memory
+  sleep(1);
+
+  timespec current{}, temp{}, diff{};
+
+  while (true) {
+    auto string = strtok(shm, delim);
+    if (string != nullptr) {
+      temp.tv_sec = std::atol(string);
+      string = strtok(nullptr, delim);
+      if (string != nullptr) {
+        temp.tv_nsec = std::atol(string);
+      }
+    }
+
+    timespec_diff(&current, &temp, &diff);
+    // TODO: This assumes under 1 second interval atm
+    if (diff.tv_nsec >= SIG_INTERVAL_NS) {
+      current = temp;
+      printf("%li %li SIGPROF\n", temp.tv_sec, temp.tv_nsec);
+    }
   }
 
-  close(conn);
-  close(fd);
+//  std::ofstream fout("/tmp/res.log");
+//
+//  for (auto &&item : collector) {
+//    fout << item << "\n";
+//  }
+
+//  fout.flush();
+//  fout.close();
+//  close(conn);
+//  close(fd);
 }
+#pragma clang diagnostic pop
 
 int main(int argc, char **argv) {
   start_server_and_send_memfd_to_clients();
