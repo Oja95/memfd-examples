@@ -24,6 +24,7 @@
 #include <vector>
 #include <set>
 #include <fstream>
+#include <signal.h>
 
 #include "memfd.hpp"
 
@@ -101,7 +102,7 @@ static void send_fd(int conn, int fd) {
 
 #define LOCAL_SOCKET_NAME    "/tmp/unix_socket"
 #define MAX_CONNECT_BACKLOG  128
-#define SIG_INTERVAL_NS 1000
+#define SIG_INTERVAL_NS 10000
 
 void timespec_diff(const struct timespec *start, const struct timespec *stop,
                    struct timespec *result) {
@@ -141,12 +142,11 @@ static void start_server_and_send_memfd_to_clients() {
   ret = listen(sock, MAX_CONNECT_BACKLOG);
   if (ret != 0) error("listen()");
 
-//  while (true) {
-  conn = accept(sock, (struct sockaddr *) &address, &addrlen);
-//    if (conn == -1)
-//      break;
 
-  /* Remove useless ctime(3) trailing newline */
+  conn = accept(sock, (struct sockaddr *) &address, &addrlen);
+
+
+
   time_t now = time(nullptr);
   char *nowbuf = ctime(&now);
   nowbuf[strlen(nowbuf) - 1] = '\0';
@@ -155,6 +155,15 @@ static void start_server_and_send_memfd_to_clients() {
 
   fd = new_memfd_region(nowbuf);
   send_fd(conn, fd);
+
+  sleep(1);
+
+  int pid;
+  int res = read(conn, &pid, sizeof(int));
+  if (res < 0) {
+    printf("Didn't get pid from domain socket!");
+  }
+  printf("%d\n", pid);
 
   char *shm;
   const int shm_size = 1024;
@@ -182,7 +191,8 @@ static void start_server_and_send_memfd_to_clients() {
     // TODO: This assumes under 1 second interval atm
     if (diff.tv_nsec >= SIG_INTERVAL_NS) {
       current = temp;
-      printf("%li %li SIGPROF\n", temp.tv_sec, temp.tv_nsec);
+      kill(pid, SIGPROF);
+//      printf("%li %li SIGPROF\n", temp.tv_sec, temp.tv_nsec);
     }
   }
 
