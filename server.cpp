@@ -25,11 +25,13 @@
 #include <set>
 #include <fstream>
 #include <signal.h>
+#include <sys/time.h>
 
 #include "memfd.hpp"
 
-
-static int new_memfd_region(char *unique_str) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+int new_memfd_region(char *unique_str) {
   char *shm;
   const int shm_size = 1024;
   int fd, ret;
@@ -43,7 +45,7 @@ static int new_memfd_region(char *unique_str) {
   ret = fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK);
   if (ret == -1) error("fcntl(F_SEAL_SHRINK)");
 
-  shm = static_cast<char *>(mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+  shm = static_cast<char *>(mmap(nullptr, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
   if (shm == MAP_FAILED) error("mmap()");
 
   sprintf(shm, "Connection accepted timestamp from server: %s", unique_str);
@@ -56,7 +58,7 @@ static int new_memfd_region(char *unique_str) {
   return fd;
 }
 
-static void send_fd(int conn, int fd) {
+void send_fd(int conn, int fd) {
   struct msghdr msgh{};
   struct iovec iov{};
   union {
@@ -111,8 +113,18 @@ void timespec_diff(const struct timespec *start, const struct timespec *stop,
 
 static const char *const delim = " ";
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
+timespec &readTimeFromSharedMemory(char *shm, timespec &temp) {
+  auto string = strtok(shm, delim);
+  if (string != nullptr) {
+      temp.tv_sec = atol(string);
+      string = strtok(nullptr, delim);
+      if (string != nullptr) {
+        temp.tv_nsec = atol(string);
+      }
+    }
+  return temp;
+}
+
 static void start_server_and_send_memfd_to_clients() {
   int sock, conn, fd, ret;
   struct sockaddr_un address;
@@ -163,43 +175,43 @@ static void start_server_and_send_memfd_to_clients() {
   shm = static_cast<char *>(mmap(nullptr, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
   if (shm == MAP_FAILED) errorp("mmap");
 
-
   // Wait until the client has memory mapped the shared memory and is writing to the memory
+  // TODO: Think of better synchronization mechanism
   sleep(1);
   printf("READY!\n");
 
-  timespec current{}, temp{}, diff{};
+
+  timespec current{}, newVal{}, diff{};
+  timespec sleep{};
   while (true) {
-    auto string = strtok(shm, delim);
-    if (string != nullptr) {
-      temp.tv_sec = std::atol(string);
-      string = strtok(nullptr, delim);
-      if (string != nullptr) {
-        temp.tv_nsec = std::atol(string);
+    current = readTimeFromSharedMemory(shm, current);
+    kill(pid, SIGALRM);
+
+    while (true) {
+      if (newVal.tv_nsec != current.tv_nsec || newVal.tv_sec != current.tv_sec) break;
+      kill(pid, SIGALRM);
+      newVal = readTimeFromSharedMemory(shm, newVal);
+    }
+
+    timespec_diff(&current, &newVal, &diff);
+
+    if (diff.tv_nsec >= SIG_INTERVAL_NS) {
+      kill(pid, SIGPROF);
+    } else {
+      long sleepTime = SIG_INTERVAL_NS - diff.tv_nsec - 20;
+      if (sleepTime > 0) {
+        sleep.tv_nsec = sleepTime;
+        nanosleep(&sleep, nullptr);
       }
     }
-
-    timespec_diff(&current, &temp, &diff);
-    if (diff.tv_nsec >= SIG_INTERVAL_NS) {
-      current = temp;
-      kill(pid, SIGPROF);
-    }
+    current = newVal;
   }
 
-//  std::ofstream fout("/tmp/res.log");
-//
-//  for (auto &&item : collector) {
-//    fout << item << "\n";
-//  }
-
-//  fout.flush();
-//  fout.close();
-//  close(conn);
-//  close(fd);
 }
-#pragma clang diagnostic pop
 
 int main(int argc, char **argv) {
   start_server_and_send_memfd_to_clients();
   return 0;
 }
+
+#pragma clang diagnostic pop
