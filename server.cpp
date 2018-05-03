@@ -46,23 +46,16 @@ static int new_memfd_region(char *unique_str) {
   shm = static_cast<char *>(mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
   if (shm == MAP_FAILED) error("mmap()");
 
-  sprintf(shm, "Secure zero-copy message from server: %s", unique_str);
+  sprintf(shm, "Connection accepted timestamp from server: %s", unique_str);
 
-  /* Seal writes too, but unmap our shared mappings beforehand */
   ret = munmap(shm, shm_size);
   if (ret == -1) error("munmap()");
-//  ret = fcntl(fd, F_ADD_SEALS, F_SEAL_WRITE);
-//  if (ret == -1)
-//    error("fcntl(F_SEAL_WRITE)");
-
   ret = fcntl(fd, F_ADD_SEALS, F_SEAL_SEAL);
   if (ret == -1) error("fcntl(F_SEAL_SEAL)");
 
   return fd;
 }
 
-/* Pass file descriptor @fd to the client, which is
- * connected to us through the Unix domain socket @conn */
 static void send_fd(int conn, int fd) {
   struct msghdr msgh{};
   struct iovec iov{};
@@ -102,7 +95,7 @@ static void send_fd(int conn, int fd) {
 
 #define LOCAL_SOCKET_NAME    "/tmp/unix_socket"
 #define MAX_CONNECT_BACKLOG  128
-#define SIG_INTERVAL_NS 10000
+#define SIG_INTERVAL_NS 50000
 
 void timespec_diff(const struct timespec *start, const struct timespec *stop,
                    struct timespec *result) {
@@ -124,7 +117,6 @@ static void start_server_and_send_memfd_to_clients() {
   int sock, conn, fd, ret;
   struct sockaddr_un address;
   socklen_t addrlen;
-
 
   sock = socket(PF_UNIX, SOCK_STREAM, 0);
   if (sock == -1) error("socket()");
@@ -174,9 +166,9 @@ static void start_server_and_send_memfd_to_clients() {
 
   // Wait until the client has memory mapped the shared memory and is writing to the memory
   sleep(1);
+  printf("READY!\n");
 
   timespec current{}, temp{}, diff{};
-
   while (true) {
     auto string = strtok(shm, delim);
     if (string != nullptr) {
@@ -188,11 +180,9 @@ static void start_server_and_send_memfd_to_clients() {
     }
 
     timespec_diff(&current, &temp, &diff);
-    // TODO: This assumes under 1 second interval atm
     if (diff.tv_nsec >= SIG_INTERVAL_NS) {
       current = temp;
       kill(pid, SIGPROF);
-//      printf("%li %li SIGPROF\n", temp.tv_sec, temp.tv_nsec);
     }
   }
 
